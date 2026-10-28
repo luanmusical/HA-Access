@@ -1,0 +1,10 @@
+*.py
+*.pyw
+*.c
+*.dll
+*.exe
+*.zip
+*.bat
+*.ps1
+__pycache__/
+build/
