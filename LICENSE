@@ -41,10 +41,5 @@ Este programa usa, em tempo de build/execução:
 - **NVDA Controller Client** — distribuído pela NV Access como parte do SDK do NVDA, usado para enviar fala ao NVDA.
 - **System Access API (SAAPI)** — rota de fala para o System Access.
 
-O comportamento dos sensores, comandos, notificações e da integração MQTT
-segue o **HASS.Agent** (HASS.Agent Team, https://github.com/hass-agent/HASS.Agent)
-— MIT License —, para o HA-Access ser compatível com a integração dele no
-Home Assistant.
-
 Home Assistant é uma marca da Open Home Foundation. Este programa não é
-afiliado ao Home Assistant, à Open Home Foundation nem ao HASS.Agent.
+afiliado ao Home Assistant nem à Open Home Foundation.
