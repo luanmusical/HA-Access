@@ -1,0 +1,135 @@
+# Compila o HA-Access para Mac (um .app Universal: chip Apple + Intel) numa máquina Mac do GitHub.
+# O código-fonte NÃO fica aqui: ele é baixado do repositório privado HA-Access-src com uma chave
+# somente-leitura (segredo SRC_DEPLOY_KEY). Este arquivo só diz COMO compilar.
+#
+# A versão de Windows é publicada primeiro (release v<versao>); este fluxo junta o pacote do Mac
+# (HA-Access-Mac.zip) à MESMA release, para as duas versões andarem sempre juntas.
+#   - versao: a mesma do Windows (tem que bater com VERSAO do código).
+#   - publicar: marcado = anexa o HA-Access-Mac.zip à release v<versao> (os Macs passam a se atualizar).
+#     Desmarcado = só compila e testa, e deixa o pacote em "Artifacts".
+name: Compilar Mac
+
+on:
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: "Versão (a mesma do Windows, ex.: 0.3.2)"
+        required: true
+      publicar:
+        description: "Anexar o pacote do Mac à release v<versao>?"
+        type: boolean
+        default: false
+      ref:
+        description: "Branch ou commit do código-fonte"
+        default: "main"
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    name: Mac (Universal)
+    runs-on: macos-14
+    timeout-minutes: 180
+    steps:
+      - name: Código-fonte (repositório privado)
+        uses: actions/checkout@v4
+        with:
+          repository: luanmusical/HA-Access-src
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.SRC_DEPLOY_KEY }}
+          path: src
+
+      - name: Python Universal do python.org (chip Apple e Intel)
+        run: |
+          curl -sSLo python.pkg https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg
+          sudo installer -pkg python.pkg -target /
+          echo "/Library/Frameworks/Python.framework/Versions/3.12/bin" >> "$GITHUB_PATH"
+
+      - name: Rosetta (para compilar a metade Intel)
+        run: softwareupdate --install-rosetta --agree-to-license || true
+
+      - name: Conferir a versão
+        working-directory: src
+        run: |
+          V=$(python3 -c "from ha_access import VERSAO; print(VERSAO)")
+          echo "versão no código: $V"
+          [ "$V" = "${{ inputs.versao }}" ] || { echo "A versão pedida (${{ inputs.versao }}) não é a do código ($V)"; exit 1; }
+
+      - name: Compilar
+        run: sh src/build_mac.sh
+
+      - name: Teste - o programa abre e fica aberto
+        run: |
+          mkdir -p testes
+          export HA_ACCESS_PASTA="$RUNNER_TEMP/dados"; export HA_ACCESS_SEM_SAIDA=1
+          mkdir -p "$HA_ACCESS_PASTA"
+          APP="src/build_mac/HA-Access.app/Contents/MacOS/HA-Access"
+          for ARQ in arm64 x86_64; do
+            arch -$ARQ "$APP" > "testes/abrir_$ARQ.txt" 2>&1 &
+            PID=$!
+            sleep 25
+            if ! kill -0 $PID 2>/dev/null; then echo "O programa FECHOU sozinho ($ARQ)"; cat "testes/abrir_$ARQ.txt"; cat "$HA_ACCESS_PASTA/erros.log" 2>/dev/null; exit 1; fi
+            kill $PID; wait $PID 2>/dev/null || true
+            echo "abriu e ficou aberto: $ARQ"
+          done
+          if [ -s "$HA_ACCESS_PASTA/erros.log" ]; then echo "--- erros.log"; cat "$HA_ACCESS_PASTA/erros.log"; exit 1; fi
+
+      - name: Teste - foto da acessibilidade de todas as telas (VoiceOver)
+        continue-on-error: true
+        working-directory: src
+        run: |
+          timeout 600 build_mac/venv_arm64/bin/python tests/foto_telas.py "$GITHUB_WORKSPACE/testes/foto" || echo "foto terminou com erro"
+          grep -c "=====" "$GITHUB_WORKSPACE/testes/foto/foto.txt" || true
+          grep -n "ERRO" "$GITHUB_WORKSPACE/testes/foto/foto.txt" | head -40 || true
+
+      - name: Teste - atualizador (troca do .app pelo script)
+        working-directory: src
+        run: build_mac/venv_arm64/bin/python tests/test_atualizador_mac.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: testes-mac
+          path: testes/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HA-Access-Mac
+          path: src/build_mac/HA-Access-Mac.zip
+          if-no-files-found: error
+
+  publicar:
+    name: Anexar à release
+    if: ${{ inputs.publicar }}
+    needs: [mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: HA-Access-Mac
+          path: pacote
+      - name: Anexar o HA-Access-Mac.zip e o SHA-256 nas notas
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ inputs.versao }}
+        run: |
+          cd pacote
+          gh release view "$TAG" -R "${{ github.repository }}" --json tagName > /dev/null
+          gh release upload "$TAG" HA-Access-Mac.zip --clobber -R "${{ github.repository }}"
+          SHA=$(sha256sum HA-Access-Mac.zip | cut -d' ' -f1)
+          gh release view "$TAG" -R "${{ github.repository }}" --json body -q .body > notas.md
+          python3 - "$SHA" <<'EOF'
+          import re, sys
+          sha = sys.argv[1]
+          s = open("notas.md", encoding="utf-8").read()
+          s = re.sub(r"\n## Mac\n.*?(?=\n## |\Z)", "\n", s, flags=re.S)
+          bloco = ("\n## Mac\n\n"
+                   "- **HA-Access-Mac.zip**: o programa para Mac (chip Apple e Intel), com o LEIA-ME e os manuais. "
+                   "Veja no LEIA-ME como abrir na primeira vez.\n\n```\nHA-Access-Mac.zip\n" + sha + "\n```\n")
+          marca = "\n## Requisitos"
+          s = s.replace(marca, bloco + marca, 1) if marca in s else s.rstrip() + "\n" + bloco
+          open("notas.md", "w", encoding="utf-8").write(s)
+          EOF
+          gh release edit "$TAG" -R "${{ github.repository }}" --notes-file notas.md
+          echo "HA-Access-Mac.zip anexado a $TAG ($SHA)"
