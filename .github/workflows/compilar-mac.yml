@@ -22,6 +22,10 @@ on:
       ref:
         description: "Branch ou commit do código-fonte"
         default: "main"
+      compilar:
+        description: "Compilar (desmarcado = só os testes rápidos do código, uns 5 minutos)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -56,12 +60,39 @@ jobs:
           echo "versão no código: $V"
           [ "$V" = "${{ inputs.versao }}" ] || { echo "A versão pedida (${{ inputs.versao }}) não é a do código ($V)"; exit 1; }
 
+      - name: Testes rápidos do código, antes de compilar (abrir, telas, atualizador, sensores)
+        working-directory: src
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/testes"
+          python3 -m venv "$RUNNER_TEMP/venv_teste"
+          PYT="$RUNNER_TEMP/venv_teste/bin/python"
+          $PYT -m pip install -q --upgrade pip
+          $PYT -m pip install -q -r requirements-mac.txt
+          export HA_ACCESS_SEM_SAIDA=1
+          export HA_ACCESS_PASTA="$RUNNER_TEMP/dados_codigo"; mkdir -p "$HA_ACCESS_PASTA"
+          $PYT HA-Access.pyw > "$GITHUB_WORKSPACE/testes/abrir_codigo.txt" 2>&1 &
+          PID=$!
+          sleep 20
+          if ! kill -0 $PID 2>/dev/null; then echo "O programa (código) FECHOU sozinho"; cat "$GITHUB_WORKSPACE/testes/abrir_codigo.txt"; cat "$HA_ACCESS_PASTA/erros.log" 2>/dev/null; exit 1; fi
+          kill $PID; wait $PID 2>/dev/null || true
+          if [ -s "$HA_ACCESS_PASTA/erros.log" ]; then echo "--- erros.log"; cat "$HA_ACCESS_PASTA/erros.log"; exit 1; fi
+          echo "== o programa abriu e ficou aberto"
+          unset HA_ACCESS_PASTA
+          $PYT tests/test_atualizador_mac.py
+          $PYT tests/test_sensores.py > "$GITHUB_WORKSPACE/testes/sensores.txt" 2>&1 || true
+          tail -3 "$GITHUB_WORKSPACE/testes/sensores.txt"
+          $PYT tests/foto_telas.py "$GITHUB_WORKSPACE/testes/foto" > "$GITHUB_WORKSPACE/testes/foto_log.txt" 2>&1 || true
+          echo "telas fotografadas: $(grep -c '=====' "$GITHUB_WORKSPACE/testes/foto/foto.txt" 2>/dev/null)"
+          if grep -n "ERRO" "$GITHUB_WORKSPACE/testes/foto/foto.txt"; then echo "telas com ERRO"; tail -30 "$GITHUB_WORKSPACE/testes/foto_log.txt"; exit 1; fi
+          [ -s "$GITHUB_WORKSPACE/testes/foto/foto.txt" ] || { echo "a foto não terminou"; tail -40 "$GITHUB_WORKSPACE/testes/foto_log.txt"; exit 1; }
+
       - name: Compilar
+        if: ${{ inputs.compilar }}
         run: sh src/build_mac.sh
 
-      - name: Teste - o programa abre e fica aberto
+      - name: Teste - o programa compilado abre e fica aberto (chip Apple e Intel)
+        if: ${{ inputs.compilar }}
         run: |
-          mkdir -p testes
           export HA_ACCESS_PASTA="$RUNNER_TEMP/dados"; export HA_ACCESS_SEM_SAIDA=1
           mkdir -p "$HA_ACCESS_PASTA"
           APP="src/build_mac/HA-Access.app/Contents/MacOS/HA-Access"
@@ -75,18 +106,6 @@ jobs:
           done
           if [ -s "$HA_ACCESS_PASTA/erros.log" ]; then echo "--- erros.log"; cat "$HA_ACCESS_PASTA/erros.log"; exit 1; fi
 
-      - name: Teste - foto da acessibilidade de todas as telas (VoiceOver)
-        continue-on-error: true
-        working-directory: src
-        run: |
-          timeout 600 build_mac/venv_arm64/bin/python tests/foto_telas.py "$GITHUB_WORKSPACE/testes/foto" || echo "foto terminou com erro"
-          grep -c "=====" "$GITHUB_WORKSPACE/testes/foto/foto.txt" || true
-          grep -n "ERRO" "$GITHUB_WORKSPACE/testes/foto/foto.txt" | head -40 || true
-
-      - name: Teste - atualizador (troca do .app pelo script)
-        working-directory: src
-        run: build_mac/venv_arm64/bin/python tests/test_atualizador_mac.py
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -94,6 +113,7 @@ jobs:
           path: testes/
 
       - uses: actions/upload-artifact@v4
+        if: ${{ inputs.compilar }}
         with:
           name: HA-Access-Mac
           path: src/build_mac/HA-Access-Mac.zip
@@ -101,7 +121,7 @@ jobs:
 
   publicar:
     name: Anexar à release
-    if: ${{ inputs.publicar }}
+    if: ${{ inputs.publicar && inputs.compilar }}
     needs: [mac]
     runs-on: ubuntu-latest
     steps:
