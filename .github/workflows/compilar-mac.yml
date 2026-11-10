@@ -85,6 +85,8 @@ jobs:
           echo "telas fotografadas: $(grep -c '=====' "$GITHUB_WORKSPACE/testes/foto/foto.txt" 2>/dev/null)"
           if grep -n "ERRO" "$GITHUB_WORKSPACE/testes/foto/foto.txt"; then echo "telas com ERRO"; tail -30 "$GITHUB_WORKSPACE/testes/foto_log.txt"; exit 1; fi
           [ -s "$GITHUB_WORKSPACE/testes/foto/foto.txt" ] || { echo "a foto não terminou"; tail -40 "$GITHUB_WORKSPACE/testes/foto_log.txt"; exit 1; }
+          echo "== leitura por fora, como o VoiceOver (System Events)"
+          $PYT tests/ax_externo_mac.py "$GITHUB_WORKSPACE/testes/ax_externo.txt" || echo "leitura por fora falhou"
 
       - name: Compilar
         if: ${{ inputs.compilar }}
