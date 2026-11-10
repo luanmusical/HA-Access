@@ -81,7 +81,7 @@ jobs:
           $PYT tests/test_atualizador_mac.py
           $PYT tests/test_sensores.py > "$GITHUB_WORKSPACE/testes/sensores.txt" 2>&1 || true
           tail -3 "$GITHUB_WORKSPACE/testes/sensores.txt"
-          $PYT tests/foto_telas.py "$GITHUB_WORKSPACE/testes/foto" > "$GITHUB_WORKSPACE/testes/foto_log.txt" 2>&1 || true
+          HA_ACCESS_AX_LOG=1 $PYT tests/foto_telas.py "$GITHUB_WORKSPACE/testes/foto" > "$GITHUB_WORKSPACE/testes/foto_log.txt" 2>&1 || true
           echo "telas fotografadas: $(grep -c '=====' "$GITHUB_WORKSPACE/testes/foto/foto.txt" 2>/dev/null)"
           if grep -n "ERRO" "$GITHUB_WORKSPACE/testes/foto/foto.txt"; then echo "telas com ERRO"; tail -30 "$GITHUB_WORKSPACE/testes/foto_log.txt"; exit 1; fi
           [ -s "$GITHUB_WORKSPACE/testes/foto/foto.txt" ] || { echo "a foto não terminou"; tail -40 "$GITHUB_WORKSPACE/testes/foto_log.txt"; exit 1; }
