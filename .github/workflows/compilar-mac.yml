@@ -29,7 +29,7 @@ permissions:
 jobs:
   mac:
     name: Mac (Universal)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 180
     steps:
       - name: Código-fonte (repositório privado)
