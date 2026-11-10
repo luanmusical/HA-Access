@@ -107,6 +107,8 @@ jobs:
             echo "abriu e ficou aberto: $ARQ"
           done
           if [ -s "$HA_ACCESS_PASTA/erros.log" ]; then echo "--- erros.log"; cat "$HA_ACCESS_PASTA/erros.log"; exit 1; fi
+          echo "== leitura por fora do programa compilado (como o VoiceOver)"
+          (cd src && build_mac/venv_arm64/bin/python tests/ax_externo_mac.py "$GITHUB_WORKSPACE/testes/ax_compilado.txt" "$PWD/build_mac/HA-Access.app/Contents/MacOS/HA-Access") | head -3
 
       - uses: actions/upload-artifact@v4
         if: always()
