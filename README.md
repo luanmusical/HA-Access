@@ -16,6 +16,7 @@ Cada Release traz as notas da versão com o hash **SHA-256** de cada arquivo. S�
 ## Requisitos
 
 - Windows 10/11 (64 bits).
+- Mac (chip Apple ou Intel): o `HA-Access-Mac.zip` da mesma página de Releases, com VoiceOver. Versão de teste.
 - Um Home Assistant na rede (ou por endereço externo: Nabu Casa, túnel da Cloudflare), com um usuário administrador.
 - Para o computador aparecer no Home Assistant: a integração **[HA-Access-Integration](https://github.com/luanmusical/HA-Access-Integration)** (código aberto; o programa instala sozinho pela Marketplace do Home Assistant, ou pelo HACS nas versões antigas). Também funciona pelo MQTT.
 - [NVDA](https://www.nvaccess.org/) é o leitor de tela com suporte principal (o programa também fala pelo System Access e pela voz do Windows).
