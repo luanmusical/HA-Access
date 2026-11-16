@@ -107,6 +107,14 @@ jobs:
             echo "abriu e ficou aberto: $ARQ"
           done
           if [ -s "$HA_ACCESS_PASTA/erros.log" ]; then echo "--- erros.log"; cat "$HA_ACCESS_PASTA/erros.log"; exit 1; fi
+          echo "== o pedido de encerrar do macOS (Dock, sair da conta, desligar) fecha o programa"
+          "$APP" > testes/encerrar.txt 2>&1 &
+          PID=$!
+          sleep 20
+          osascript -e 'tell application id "com.lrproductions.ha-access" to quit' || true
+          for i in $(seq 1 20); do kill -0 $PID 2>/dev/null || break; sleep 0.5; done
+          if kill -0 $PID 2>/dev/null; then echo "O programa SEGUROU o encerramento"; kill $PID; exit 1; fi
+          echo "encerrou quando o macOS pediu"
           echo "== leitura por fora do programa compilado (como o VoiceOver)"
           (cd src && build_mac/venv_arm64/bin/python tests/ax_externo_mac.py "$GITHUB_WORKSPACE/testes/ax_compilado.txt" "$PWD/build_mac/HA-Access.app/Contents/MacOS/HA-Access") | head -3
 
